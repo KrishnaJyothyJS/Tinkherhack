@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Backend (Node.js)",
+      "program": "${workspaceFolder}/server.js", // Ensure your file is named server.js
+      "env": { "API_KEY": "YOUR_GEMINI_API_KEY_HERE" },
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Launch Chrome against localhost",
+      "url": "http://localhost:3000", // Change this to match your Node port
+      "webRoot": "${workspaceFolder}/public"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Launch Full App",
+      "configurations": ["Debug Backend (Node.js)", "Launch Chrome against localhost"]
+    }
+  ]
+}

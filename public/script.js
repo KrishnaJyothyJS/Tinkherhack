@@ -9,29 +9,53 @@ const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const display = document.getElementById('display');
 const volumeBar = document.getElementById('volumeBar');
+const transcriptionBox = document.getElementById('transcriptionBox');
 
-// Helper function to print errors directly to your phone screen
-function logToScreen(message, isError = false) {
-    let debugDiv = document.getElementById('debug-log');
-    if (!debugDiv) {
-        debugDiv = document.createElement('div');
-        debugDiv.id = 'debug-log';
-        debugDiv.style.cssText = "margin-top: 20px; padding: 10px; background: #eee; font-size: 14px; text-align: left; height: 150px; overflow-y: auto; border-radius: 5px;";
-        document.body.appendChild(debugDiv);
-    }
-    const color = isError ? "red" : "green";
-    debugDiv.innerHTML = `<div style="color: ${color}; margin-bottom: 5px;">➔ ${message}</div>` + debugDiv.innerHTML;
+// Set up Speech Recognition (Web Speech API)
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition;
+
+if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true; // Keep listening even if the user pauses
+    recognition.interimResults = true; // Show words as they are being spoken
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+            } else {
+                interimTranscript += event.results[i][0].transcript;
+            }
+        }
+
+        // Display the text (interim text is gray, final text is black)
+        transcriptionBox.innerHTML = `
+            <span style="color: black;">${finalTranscript}</span>
+            <span style="color: gray;"><i>${interimTranscript}</i></span>
+        `;
+    };
+
+    // Auto-restart if it stops accidentally
+    recognition.onend = () => {
+        if (isListening) recognition.start();
+    };
+} else {
+    transcriptionBox.innerHTML = "<span style='color:red;'>Speech Recognition not supported in this browser. Try Chrome.</span>";
 }
 
 startBtn.addEventListener('click', async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        logToScreen("Microphone access granted.");
         
-        // Initialize Web Audio API
+        // 1. Start Vibration Audio Logic
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256; // Defines how many audio samples we analyze at a time
+        analyser.fftSize = 256; 
         
         microphone = audioContext.createMediaStreamSource(stream);
         microphone.connect(analyser);
@@ -40,11 +64,18 @@ startBtn.addEventListener('click', async () => {
         startBtn.disabled = true;
         stopBtn.disabled = false;
         display.innerText = "Listening for sounds...";
+        transcriptionBox.innerHTML = "<span style='color: gray;'>Listening...</span>";
         
-        processAudio(); // Start the real-time loop
+        processAudio(); 
+
+        // 2. Start Speech Recognition
+        if (recognition) {
+            try { recognition.start(); } catch (e) {} // Catch error if already started
+        }
+
     } catch (err) {
-        logToScreen(`Mic Error: ${err.message}`, true);
         display.innerText = "Error: Mic access denied.";
+        console.error(err);
     }
 });
 
@@ -56,13 +87,18 @@ stopBtn.addEventListener('click', () => {
         audioContext.close();
     }
     
+    // Stop Speech Recognition
+    if (recognition) {
+        recognition.stop();
+    }
+
     startBtn.disabled = false;
     stopBtn.disabled = true;
     display.innerText = "Stopped.";
     volumeBar.style.width = '0%';
-    logToScreen("Stopped listening.");
 });
 
+// Vibration Logic (Unchanged)
 function processAudio() {
     if (!isListening) return;
 
@@ -70,44 +106,27 @@ function processAudio() {
     const dataArray = new Uint8Array(bufferLength);
     analyser.getByteFrequencyData(dataArray);
 
-    // Calculate the average volume of the current audio frame
     let sum = 0;
-    for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
-    }
+    for (let i = 0; i < bufferLength; i++) { sum += dataArray[i]; }
     let averageVolume = sum / bufferLength;
 
-    // Convert volume to a percentage (Max volume is roughly 255)
     let volumePercent = Math.min((averageVolume / 100) * 100, 100); 
     
-    // Update the visual volume bar
     volumeBar.style.width = volumePercent + '%';
     if (volumePercent > 70) volumeBar.style.background = 'red';
     else if (volumePercent > 40) volumeBar.style.background = 'orange';
     else volumeBar.style.background = 'green';
 
-    // --- SENSORY SUBSTITUTION LOGIC (VIBRATION) ---
     const currentTime = Date.now();
     
-    // Thresholds: Only vibrate if sound is above a certain level (e.g., > 20)
-    // Cooldown: Wait 250ms between vibrations so they don't overlap and glitch
     if (averageVolume > 20 && (currentTime - lastVibrateTime > 250)) { 
-        
-        let vibrateDuration = 50; // default short pulse for medium sound
-        
-        if (averageVolume > 70) {
-            vibrateDuration = 200; // Long strong pulse for loud sounds (siren, shout)
-        } else if (averageVolume > 40) {
-            vibrateDuration = 100; // Medium pulse for normal loud sounds (claps, drops)
-        }
+        let vibrateDuration = 50; 
+        if (averageVolume > 70) vibrateDuration = 200; 
+        else if (averageVolume > 40) vibrateDuration = 100; 
 
-        if (navigator.vibrate) {
-            navigator.vibrate(vibrateDuration);
-        }
-        
+        if (navigator.vibrate) navigator.vibrate(vibrateDuration);
         lastVibrateTime = currentTime;
     }
 
-    // Loop this function to keep analyzing real-time
     animationId = requestAnimationFrame(processAudio);
 }

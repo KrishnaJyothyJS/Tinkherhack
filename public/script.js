@@ -1,115 +1,38 @@
-import { AudioClassifier, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/audio_bundle.js";
-
-// --- STATE & GLOBALS ---
-let audioClassifier;
 let audioContext;
 let analyser;
 let microphone;
+let globalStream = null; // Store the mic stream for the manual AI button
 let isListening = false;
 let animationId;
 let lastVibrateTime = 0;
-let fullHistory = ""; // Stores the combined speech and sound logs
 
-// Sound tracking to prevent spamming the same sound
-let lastSound = "";
-let soundTimeout;
-
-// UI Elements
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const analyzeBtn = document.getElementById('analyzeBtn');
 const display = document.getElementById('display');
 const volumeBar = document.getElementById('volumeBar');
 const transcriptionBox = document.getElementById('transcriptionBox');
 
-// --- 1. INITIALIZE AI MODEL ---
-async function initializeAI() {
-    try {
-        const audioFileset = await FilesetResolver.forAudioTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.0/wasm"
-        );
-        audioClassifier = await AudioClassifier.createFromOptions(audioFileset, {
-            baseOptions: {
-                // Official YAMNet model URL
-                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite"
-            }
-        });
-        display.innerText = "AI Ready! Press Start.";
-        startBtn.disabled = false;
-    } catch (error) {
-        console.error(error);
-        display.innerText = "Error loading AI model.";
-    }
-}
-initializeAI();
-
-// --- 2. SET UP SPEECH RECOGNITION ---
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition;
-
-if (SpeechRecognition) {
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = (event) => {
-        let interimTranscript = '';
-        let newFinalText = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-                newFinalText += event.results[i][0].transcript + " ";
-            } else {
-                interimTranscript += event.results[i][0].transcript;
-            }
-        }
-
-        if (newFinalText) fullHistory += newFinalText;
-
-        transcriptionBox.innerHTML = `
-            <span style="color: black;">${fullHistory}</span>
-            <span style="color: gray;"><i>${interimTranscript}</i></span>
-        `;
-        transcriptionBox.scrollTop = transcriptionBox.scrollHeight;
-    };
-
-    recognition.onend = () => {
-        if (isListening) recognition.start(); // Auto-restart if it stops unexpectedly
-    };
-} else {
-    fullHistory = "<b style='color:red;'>Speech Recognition not supported. Use Chrome.</b><br>";
-    updateTranscriptionBox();
-}
-
-// --- 3. START / STOP LOGIC ---
 startBtn.addEventListener('click', async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        globalStream = stream; // Save for Gemini
         
-        // Setup AudioContext (Required 16000 Hz for YAMNet AI model)
-        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-        microphone = audioContext.createMediaStreamSource(stream);
-        
-        // Node A: For Real-time Vibration (Analyser)
+        // --- LOCAL VIBRATION LOGIC (Zero Lag) ---
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256; 
+        analyser.fftSize = 256;
+        microphone = audioContext.createMediaStreamSource(stream);
         microphone.connect(analyser);
         
-        // Node B: For Background Sounds (ScriptProcessor passes chunks to AI)
-        const scriptNode = audioContext.createScriptProcessor(16384, 1, 1);
-        microphone.connect(scriptNode);
-        scriptNode.connect(audioContext.destination);
-
-        scriptNode.onaudioprocess = processEnvironmentalAudio;
-
         isListening = true;
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        display.innerText = "Listening...";
-        if (!fullHistory) fullHistory = "";
+        analyzeBtn.disabled = false; // Enable the Gemini button
         
-        processVolumeForVibration(); 
-        if (recognition) recognition.start();
+        display.innerText = "Mic Active. Vibrations ON.";
+        
+        processVolumeForVibration();
 
     } catch (err) {
         display.innerText = "Error: Mic access denied.";
@@ -122,43 +45,73 @@ stopBtn.addEventListener('click', () => {
     cancelAnimationFrame(animationId);
     
     if (audioContext) audioContext.close();
-    if (recognition) recognition.stop();
+    globalStream = null;
 
     startBtn.disabled = false;
     stopBtn.disabled = true;
+    analyzeBtn.disabled = true; // Disable the Gemini button
     display.innerText = "Stopped.";
     volumeBar.style.width = '0%';
 });
 
-// --- 4. ENVIRONMENTAL SOUND CLASSIFICATION ---
-function processEnvironmentalAudio(event) {
-    if (!isListening || !audioClassifier) return;
-    
-    // Extract ~1 second of raw audio data
-    const inputData = event.inputBuffer.getChannelData(0);
-    const result = audioClassifier.classify(inputData);
-    
-    if (result && result.length > 0) {
-        // AI returns a list of categories sorted by confidence score
-        const topCategory = result[0].classifications[0].categories[0];
-        
-        // Ignore generic labels (we only want distinct events like sirens or horns)
-        const ignoreList = ["Speech", "Silence", "Inside, small room", "Inside, large room or hall", "Noise", "Mechanisms"];
-        
-        if (topCategory.score > 0.35 && !ignoreList.includes(topCategory.categoryName)) {
-            // Prevent spamming the same sound
-            if (topCategory.categoryName !== lastSound) {
-                appendHistory(`<b style="color: #d9534f; font-size: 18px;">[${topCategory.categoryName}]</b> `);
-                
-                lastSound = topCategory.categoryName;
-                clearTimeout(soundTimeout);
-                soundTimeout = setTimeout(() => { lastSound = ""; }, 4000); // Wait 4 seconds before allowing the same label
-            }
-        }
-    }
-}
+// --- NEW MANUAL GEMINI LOGIC ---
+analyzeBtn.addEventListener('click', async () => {
+    if (!globalStream) return;
 
-// --- 5. VIBRATION & VOLUME LOGIC ---
+    // Temporarily disable button to prevent spam
+    analyzeBtn.disabled = true;
+    const originalText = analyzeBtn.innerText;
+    analyzeBtn.innerText = "🎙️ Recording (4s)...";
+
+    // Setup a 1-time recorder
+    const recorder = new MediaRecorder(globalStream, { mimeType: 'audio/webm' });
+    const chunks = [];
+
+    recorder.ondataavailable = e => {
+        if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+        analyzeBtn.innerText = "⚙️ Thinking...";
+        
+        // Combine chunks into one file
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('audio', blob, 'clip.webm');
+
+        try {
+            const response = await fetch('/analyze-audio', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            
+            if (result.text && result.text !== "NONE") {
+                appendTranscription(result.text);
+            } else if (result.text === "NONE") {
+                appendTranscription("<i style='color: gray; font-size: 16px;'>[No distinct sounds detected]</i>");
+            }
+        } catch (err) {
+            console.error("Server error:", err);
+            appendTranscription("<i style='color: red; font-size: 16px;'>[Error connecting to AI]</i>");
+        }
+
+        // Re-enable button
+        analyzeBtn.innerText = originalText;
+        analyzeBtn.disabled = false;
+    };
+
+    // Start recording, then forcefully stop it after exactly 4000ms (4 seconds)
+    recorder.start();
+    setTimeout(() => {
+        if (recorder.state === "recording") {
+            recorder.stop();
+        }
+    }, 4000);
+});
+
+
+// --- Instant Vibration Function ---
 function processVolumeForVibration() {
     if (!isListening) return;
 
@@ -179,7 +132,6 @@ function processVolumeForVibration() {
 
     const currentTime = Date.now();
     
-    // Threshold & Cooldown for Vibrate
     if (averageVolume > 20 && (currentTime - lastVibrateTime > 250)) { 
         let vibrateDuration = 50; 
         if (averageVolume > 70) vibrateDuration = 200; 
@@ -192,13 +144,19 @@ function processVolumeForVibration() {
     animationId = requestAnimationFrame(processVolumeForVibration);
 }
 
-// --- HELPER: UPDATE UI TEXT ---
-function appendHistory(htmlString) {
-    fullHistory += htmlString;
-    updateTranscriptionBox();
-}
+// --- Helper: Update Text Box ---
+let fullHistory = "";
+function appendTranscription(text) {
+    // Make bracketed sounds bold and red
+    const formattedText = text.replace(/\[(.*?)\]/g, '<br><b style="color: #d9534f;">[$1]</b><br>');
+    
+    fullHistory += formattedText + " <br>";
+    
+    // Clear out placeholder text
+    if (transcriptionBox.innerHTML.includes("AI transcriptions will appear here")) {
+        transcriptionBox.innerHTML = "";
+    }
 
-function updateTranscriptionBox() {
     transcriptionBox.innerHTML = `<span style="color: black;">${fullHistory}</span>`;
     transcriptionBox.scrollTop = transcriptionBox.scrollHeight;
 }

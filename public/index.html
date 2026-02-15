@@ -7,9 +7,12 @@
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; margin-top: 10px; background-color: #f4f4f9;}
         button { padding: 15px 30px; font-size: 20px; cursor: pointer; margin: 5px; border-radius: 8px; font-weight: bold;}
+        
         #startBtn { background-color: #4CAF50; color: white; border: none; }
         #stopBtn { background-color: #f44336; color: white; border: none; }
-        button:disabled { background-color: #ccc; }
+        #analyzeBtn { background-color: #2196F3; color: white; border: none; margin-top: 20px; padding: 20px 40px; font-size: 22px; width: 90%; max-width: 400px; display: block; margin-left: auto; margin-right: auto;}
+        
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
         
         #volumeContainer { width: 100%; max-width: 300px; height: 30px; background: #ddd; margin: 20px auto; border-radius: 15px; overflow: hidden; }
         #volumeBar { width: 0%; height: 100%; background: green; transition: width 0.1s; }
@@ -33,19 +36,21 @@
 </head>
 <body>
     <h1>Audio Monitor</h1>
-    <h3 id="display" style="color: gray;">Loading AI Models...</h3>
+    <h3 id="display" style="color: black;">Press Start to enable mic.</h3>
     
-    <button id="startBtn" disabled>Start Listening</button>
+    <button id="startBtn">Start Mic</button>
     <button id="stopBtn" disabled>Stop</button>
     
     <div id="volumeContainer">
         <div id="volumeBar"></div>
     </div>
 
+    <button id="analyzeBtn" disabled>🔍 Analyze Environment</button>
+
     <div id="transcriptionBox">
-        <span style="color: gray;">Transcriptions and sounds will appear here...</span>
+        <span style="color: gray;">AI transcriptions will appear here...</span>
     </div>
 
-    <script type="module" src="script.js"></script> 
+    <script src="script.js"></script> 
 </body>
 </html>

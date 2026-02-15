@@ -5,46 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sensory Substitution</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; margin-top: 30px;}
-        button { padding: 15px 30px; font-size: 20px; cursor: pointer; margin: 5px; border-radius: 8px;}
+        body { font-family: sans-serif; text-align: center; padding: 20px; margin-top: 10px; background-color: #f4f4f9;}
+        button { padding: 15px 30px; font-size: 20px; cursor: pointer; margin: 5px; border-radius: 8px; font-weight: bold;}
         #startBtn { background-color: #4CAF50; color: white; border: none; }
         #stopBtn { background-color: #f44336; color: white; border: none; }
         button:disabled { background-color: #ccc; }
         
-        #volumeContainer { width: 100%; max-width: 300px; height: 30px; background: #ddd; margin: 30px auto; border-radius: 15px; overflow: hidden; }
+        #volumeContainer { width: 100%; max-width: 300px; height: 30px; background: #ddd; margin: 20px auto; border-radius: 15px; overflow: hidden; }
         #volumeBar { width: 0%; height: 100%; background: green; transition: width 0.1s; }
 
-        /* New Transcription Box */
+        /* Transcription Box */
         #transcriptionBox {
             max-width: 400px;
-            margin: 20px auto;
-            padding: 15px;
+            margin: 10px auto;
+            padding: 20px;
             border: 2px solid #ccc;
             border-radius: 10px;
-            background: #f9f9f9;
-            min-height: 80px;
-            font-size: 18px;
+            background: white;
+            height: 250px;
+            overflow-y: auto;
+            font-size: 22px;
+            line-height: 1.5;
             text-align: left;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
         }
     </style>
 </head>
 <body>
-    <h1>Sound & Speech Monitor</h1>
-    <p>Converts noise to vibration and transcribes speech.</p>
+    <h1>Audio Monitor</h1>
+    <h3 id="display" style="color: gray;">Loading AI Models...</h3>
     
-    <button id="startBtn">Start Listening</button>
+    <button id="startBtn" disabled>Start Listening</button>
     <button id="stopBtn" disabled>Stop</button>
-    
-    <h3 id="display">Press Start to begin.</h3>
     
     <div id="volumeContainer">
         <div id="volumeBar"></div>
     </div>
 
     <div id="transcriptionBox">
-        <span style="color: gray;">Speech will appear here...</span>
+        <span style="color: gray;">Transcriptions and sounds will appear here...</span>
     </div>
 
-    <script src="script.js"></script> 
+    <script type="module" src="script.js"></script> 
 </body>
 </html>

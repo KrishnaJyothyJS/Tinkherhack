@@ -1,7 +1,7 @@
 <img width="1280" height="640" alt="img" src="https://github.com/user-attachments/assets/3dca0902-4012-4319-a7f9-f3b858a7b8e4" /><p align="center">
 </p>
 
-# AudioSense 🎯
+# Audio Monitor 🎯
 
 ## Basic Details
 

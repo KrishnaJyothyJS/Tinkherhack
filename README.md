@@ -12,7 +12,7 @@
 - Member 2: Krishna Jyothy JS - Saintgits College of Engineering
 
 ### Hosted Project Link
-[mention your project hosted link here - e.g., Vercel, Render, or Ngrok link]
+https://tinkherhack-dn49.onrender.com
 
 ### Project Description
 A web-based accessibility tool designed to help deaf and hard-of-hearing individuals perceive their audio environment through dual sensory substitution: real-time haptic feedback (vibrations) and on-demand AI captioning.
